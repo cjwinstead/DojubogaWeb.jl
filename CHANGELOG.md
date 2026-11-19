@@ -14,3 +14,6 @@
   icon set, and a service worker that stores the page and all puzzle packs;
   "Install app" button where the browser offers one, and an Add to Home Screen
   tip on iPhone and iPad.
+
+## 0.2.0 -- installable web app
+
