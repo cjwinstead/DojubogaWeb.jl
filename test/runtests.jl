@@ -66,6 +66,12 @@ end
             @test http(port, "/api/new?level=nope")[1] == 400
             @test http(port, "/api/new?level=hard&seed=-1")[1] == 400
             @test http(port, "/nothing-here")[1] == 404
+            st, head, _ = http(port, "/manifest.webmanifest")
+            @test st == 200 && occursin("application/manifest+json", head)
+            st, head, _ = http(port, "/icons/icon-192.png")
+            @test st == 200 && occursin("image/png", head)
+            @test http(port, "/icons/../Project.toml")[1] == 404
+            @test http(port, "/sw.js")[1] == 404                         # no offline cache for the engine
             st, head, body = http(port, "/api/info"; method = "HEAD")
             @test st == 200 && isempty(body)
             @test http(port, "/"; method = "POST")[1] == 405
@@ -80,6 +86,19 @@ end
         @test isfile(joinpath(dir, "index.html")) && isfile(joinpath(dir, ".nojekyll"))
         @test all(isfile(joinpath(dir, "puzzles", "$l.json")) for l in LEVELS)
         @test occursin("\"mode\":\"static\"", read(joinpath(dir, "api", "info.json"), String))
+        @test isfile(joinpath(dir, "manifest.webmanifest"))
+        @test all(isfile(joinpath(dir, "icons", i)) for i in W.ICONS)
+        sw = read(joinpath(dir, "sw.js"), String)
+        @test !occursin("__VERSION__", sw) && !occursin("__FILES__", sw)
+        files = ["./", "index.html", "manifest.webmanifest", ("icons/" .* W.ICONS)...,
+                 ("puzzles/" .* string.(collect(LEVELS)) .* ".json")..., "puzzles/index.json", "api/info.json"]
+        @test all(f -> occursin("\"" * f * "\"", sw), files)          # everything the game needs is cached
+        @test all(f -> f == "./" || isfile(joinpath(dir, f)), files)
+        version(d) = match(r"const VERSION = \"([0-9a-f]+)\"", read(joinpath(d, "sw.js"), String))[1]
+        dir2 = export_site(mktempdir(); per_level = 2, progress = false)
+        dir3 = export_site(mktempdir(); per_level = 3, progress = false)
+        @test version(dir) == version(dir2)                              # same site, same version
+        @test version(dir) != version(dir3)                              # changed site, new version
         pack = read(joinpath(dir, "puzzles", "hard.json"), String)
         @test occursin("\"format\":\"dojuboga-pack\"", pack)
         @test occursin(W.puzzle_json(:hard; seed = 2), pack)          # pack k uses seed k
@@ -90,6 +109,9 @@ end
             st, head, body = http(port, "/puzzles/easy.json")
             @test st == 200 && occursin("application/json", head) && body == read(joinpath(dir, "puzzles", "easy.json"), String)
             @test occursin("static", http(port, "/api/info.json")[3])
+            st, head, _ = http(port, "/sw.js")
+            @test st == 200 && occursin("text/javascript", head)
+            @test occursin("application/manifest+json", http(port, "/manifest.webmanifest")[2])
             @test http(port, "/../Project.toml")[1] == 404
             @test http(port, "/puzzles/%2e%2e/index.html")[1] == 404
             @test http(port, "/api/new?level=easy")[1] == 404              # no engine in static mode

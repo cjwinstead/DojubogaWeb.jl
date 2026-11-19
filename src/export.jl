@@ -46,28 +46,41 @@ The puzzle in the `dojuboga-puzzle` JSON format.
 puzzle_json(g::Game) = tojson(puzzle_data(g))
 puzzle_json(lvl::Symbol = :medium; seed = nothing) = puzzle_json(new_game(lvl; seed = seed))
 
-"Path of the bundled web page."
-page_path() = joinpath(@__DIR__, "..", "web", "index.html")
+"Path of a bundled web file (`index.html`, `manifest.webmanifest`, `sw.js`, `icons/…`)."
+web_path(parts...) = joinpath(@__DIR__, "..", "web", parts...)
+page_path() = web_path("index.html")
+const ICONS = ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]
 
 """
     export_site(dir; per_level=200, levels=LEVELS, first_seed=1, progress=true) -> dir
 
-Write a static version of the game to `dir`: the page (`index.html`), one
-puzzle pack per level (`puzzles/<level>.json`), `puzzles/index.json`, and
-`api/info.json` (tells the page it is running without an engine).
-Upload `dir` to any static host (e.g. GitHub Pages) — no server needed.
+Write a static version of the game to `dir`, ready for GitHub Pages or any
+static host (no server needed):
+
+* `index.html`, the game page
+* `puzzles/<level>.json`, one puzzle pack per level, and `puzzles/index.json`
+* `api/info.json`, which tells the page it is running without an engine
+* `manifest.webmanifest`, `icons/` and `sw.js`, which make the site an
+  installable app that plays offline (on a host that serves it over HTTPS)
+
 Pack `k` of a level is generated from seed `first_seed + k - 1`, so the same
 arguments reproduce the same site.
 """
 function export_site(dir::AbstractString; per_level::Integer = 200, levels = LEVELS,
                      first_seed::Integer = 1, progress::Bool = true)
     per_level >= 1 || throw(ArgumentError("per_level must be at least 1"))
-    mkpath(joinpath(dir, "puzzles"))
+    for lvl in levels
+        lvl in LEVELS || throw(ArgumentError("unknown level $lvl"))
+    end
+    mkpath(joinpath(dir, "puzzles")); mkpath(joinpath(dir, "api")); mkpath(joinpath(dir, "icons"))
     cp(page_path(), joinpath(dir, "index.html"); force = true)
+    cp(web_path("manifest.webmanifest"), joinpath(dir, "manifest.webmanifest"); force = true)
+    for icon in ICONS
+        cp(web_path("icons", icon), joinpath(dir, "icons", icon); force = true)
+    end
     touch(joinpath(dir, ".nojekyll"))                 # GitHub Pages: serve files as-is
     counts = Dict{String,Int}()
     for lvl in levels
-        lvl in LEVELS || throw(ArgumentError("unknown level $lvl"))
         puzzles = Vector{Any}(undef, per_level)
         for k in 1:per_level
             puzzles[k] = puzzle_data(new_game(lvl; seed = first_seed + k - 1))
@@ -84,10 +97,28 @@ function export_site(dir::AbstractString; per_level::Integer = 200, levels = LEV
     open(joinpath(dir, "puzzles", "index.json"), "w") do io
         writejson(io, (format = "dojuboga-index", version = FORMAT_VERSION, levels = counts))
     end
-    mkpath(joinpath(dir, "api"))                      # answers the page's engine probe
-    open(joinpath(dir, "api", "info.json"), "w") do io
+    open(joinpath(dir, "api", "info.json"), "w") do io      # answers the page's engine probe
         writejson(io, (mode = "static", levels = [string(l) for l in levels], format = FORMAT_VERSION))
     end
+    write_service_worker(dir, levels)
     progress && println("Static site written to ", abspath(dir))
     dir
+end
+
+"""
+Write `sw.js`: the list of files to keep on the device, and a version that is
+a fingerprint of their contents (so a changed site replaces the old copy).
+"""
+function write_service_worker(dir, levels)
+    files = ["index.html", "manifest.webmanifest", ["icons/" * i for i in ICONS]...,
+             ["puzzles/$l.json" for l in levels]..., "puzzles/index.json", "api/info.json"]
+    ctx = SHA.SHA256_CTX()
+    for f in files
+        SHA.update!(ctx, Vector{UInt8}(f)); SHA.update!(ctx, read(joinpath(dir, f)))
+    end
+    version = bytes2hex(SHA.digest!(ctx))[1:16]
+    template = read(web_path("sw.js"), String)
+    js = replace(template, "\"__VERSION__\"" => tojson(version), "__FILES__" => tojson(["./"; files]))
+    write(joinpath(dir, "sw.js"), js)
+    version
 end

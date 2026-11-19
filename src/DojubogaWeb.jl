@@ -6,13 +6,15 @@ Browser front end for Dojuboga. One web page (`web/index.html`) works two ways:
 * **Local:** `serve()` runs a small web server on your machine and opens the
   game in your browser; every new puzzle is generated on demand.
 * **Static:** `export_site(dir)` writes the page plus pre-generated puzzle
-  packs, ready for GitHub Pages or any static host.
+  packs, ready for GitHub Pages or any static host. The exported site is an
+  installable web app that plays offline.
 
 Built only on Dojuboga's public front-end API and the standard library.
 """
 module DojubogaWeb
 
 using Dojuboga
+using SHA
 using Sockets
 
 export serve, export_site, puzzle_json

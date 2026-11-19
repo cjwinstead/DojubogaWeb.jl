@@ -5,7 +5,7 @@
 const CONTENT_TYPES = Dict(".html" => "text/html; charset=utf-8", ".json" => "application/json",
                            ".js" => "text/javascript", ".css" => "text/css", ".svg" => "image/svg+xml",
                            ".png" => "image/png", ".txt" => "text/plain; charset=utf-8",
-                           ".ico" => "image/x-icon")
+                           ".ico" => "image/x-icon", ".webmanifest" => "application/manifest+json")
 const STATUS_TEXT = Dict(200 => "OK", 400 => "Bad Request", 404 => "Not Found",
                          405 => "Method Not Allowed", 500 => "Internal Server Error")
 
@@ -50,6 +50,10 @@ json_error(status, msg) = (status, CONTENT_TYPES[".json"], tojson((error = msg,)
 function route_local(path, query)
     if path in ("/", "/index.html")
         return 200, CONTENT_TYPES[".html"], read(page_path())
+    elseif path == "/manifest.webmanifest"
+        return 200, CONTENT_TYPES[".webmanifest"], read(web_path("manifest.webmanifest"))
+    elseif startswith(path, "/icons/") && path[8:end] in ICONS
+        return 200, CONTENT_TYPES[".png"], read(web_path("icons", path[8:end]))
     elseif path in ("/api/info", "/api/info.json")
         return 200, CONTENT_TYPES[".json"],
                tojson((mode = "local", levels = string.(collect(LEVELS)),

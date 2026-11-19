@@ -10,3 +10,7 @@
 - Static mode: `export_site(dir)` writes the page plus puzzle packs for GitHub
   Pages or any static host; `serve(site = dir)` previews it.
 - Puzzle JSON format `dojuboga-puzzle` version 1 (see README.md), `puzzle_json`.
+- Exported sites are installable web apps that play offline: web app manifest,
+  icon set, and a service worker that stores the page and all puzzle packs;
+  "Install app" button where the browser offers one, and an Add to Home Screen
+  tip on iPhone and iPad.

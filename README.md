@@ -11,6 +11,8 @@ One page, two ways to run it:
   puzzle on demand. Unlimited puzzles, and it works offline.
 - **Static site:** a folder with the page and pre-generated puzzle packs that
   any static host can serve, such as GitHub Pages. No Julia needed to play.
+  It's also an installable app: put it on a phone's home screen and it plays
+  offline.
 
 It is built only on Dojuboga's public front-end API and Julia's standard
 library, so there is nothing else to install.
@@ -59,6 +61,31 @@ gh api -X POST repos/cjwinstead/dojuboga-play/pages -f "source[branch]=main" -f 
 
 The site then appears at `https://cjwinstead.github.io/dojuboga-play/`
 after a minute or two.
+
+## Install it on a phone
+
+A site published with `export_site` on an HTTPS host (GitHub Pages is HTTPS)
+installs like an app, with its own icon and full-screen window, and plays
+without a connection:
+
+- **Android (Chrome):** open the site and choose **Install app**, either from
+  the page's own button or from the browser menu.
+- **iPhone and iPad (Safari):** open the site, tap **Share**, then
+  **Add to Home Screen**. The page shows this tip once; the × hides it.
+- **Desktop Chrome or Edge:** the page shows an **Install app** button.
+
+The first visit saves the page and all puzzle packs (about 1.2 MB with the
+default 200 puzzles per level) on the device. The page then says "Saved on this
+device, so it plays without a connection." When you publish a changed site,
+installed copies pick it up on their next visit with a connection. If a phone
+ever clears the saved copy, the app downloads it again the next time it's
+online.
+
+These parts make it work, and `export_site` writes all of them:
+`manifest.webmanifest` (name, colours, icons), `icons/`, and `sw.js` (a service
+worker that keeps the files on the device). The service worker's version is a
+fingerprint of the site's files, so any re-export with different puzzles or a
+newer page replaces the old copy.
 
 Opening `index.html` straight from disk (a `file://` address) won't work,
 because browsers block a local page from loading its own puzzle packs. Use

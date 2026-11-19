@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dojuboga</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 46'%3E%3Crect x='1' y='1' width='90' height='44' rx='9' fill='%231D2127'/%3E%3Ccircle cx='23' cy='23' r='6' fill='%23F3EEDF'/%3E%3Ccircle cx='60' cy='13' r='6' fill='%23F3EEDF'/%3E%3Ccircle cx='78' cy='33' r='6' fill='%23F3EEDF'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#E6EAF0">
+<meta name="apple-mobile-web-app-title" content="Dojuboga">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="description" content="Place every domino so each coloured region's rule holds. Every puzzle has exactly one solution.">
 <style>
 :root {
@@ -24,11 +30,17 @@ html { background: var(--paper); color: var(--ink); font-family: var(--font); }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
 
 /* header ------------------------------------------------------------------ */
+:root {
+  --edge: clamp(16px, 4vw, 48px);
+  --edge-l: max(var(--edge), env(safe-area-inset-left));
+  --edge-r: max(var(--edge), env(safe-area-inset-right));
+}
 .top {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px;
-  padding: 22px clamp(16px, 4vw, 48px) 10px;
+  padding: max(22px, env(safe-area-inset-top)) var(--edge-r) 10px var(--edge-l);
 }
 .wordmark {
   margin: 0; font-size: clamp(30px, 4.2vw, 42px); font-weight: 800; letter-spacing: -0.02em;
@@ -53,14 +65,14 @@ button { font: inherit; color: inherit; }
   flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 0 40px;
   grid-template-areas: "play status" "play side";
   grid-template-rows: auto 1fr;
-  padding: 8px clamp(16px, 4vw, 48px) 24px; align-items: start;
+  padding: 8px var(--edge-r) 24px var(--edge-l); align-items: start;
 }
 .play { grid-area: play; min-width: 0; }
 .status { grid-area: status; }
 .side { grid-area: side; }
 @media (max-width: 860px) {
   .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "play" "side"; gap: 0; }
-  .status { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 6px; }
   .status .clock { font-size: 28px; }
   .status .puzzle-id { margin: 0; }
   .side { margin-top: 30px; }
@@ -121,7 +133,21 @@ button { font: inherit; color: inherit; }
   background: var(--ink); border-radius: 4px; vertical-align: middle; margin: 0 4px 0 2px;
 }
 .rule-chip span { transform: rotate(-45deg); color: var(--ivory); font-size: 12px; font-weight: 700; }
-footer { padding: 18px clamp(16px, 4vw, 48px) 26px; font-size: 13px; color: var(--ink-soft); }
+footer { padding: 18px var(--edge-r) max(26px, env(safe-area-inset-bottom)) var(--edge-l); font-size: 13px; color: var(--ink-soft); }
+
+/* installing and offline play */
+.install { margin: 0 0 22px; }
+.install button.get {
+  border: 2px solid var(--ink); background: var(--ink); color: var(--ivory); border-radius: 999px;
+  padding: 7px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.ios-hint { margin: 0; display: flex; gap: 8px; align-items: flex-start; }
+.ios-hint button { border: 0; background: none; padding: 0 2px; font-size: 18px; line-height: 1.2; cursor: pointer; color: var(--ink-soft); }
+.offline-note { margin: 8px 0 0; font-size: 14px; }
+@media (max-width: 860px) {
+  .install { flex-basis: 100%; margin: 2px 0 10px; }
+  .offline-note { margin-top: 4px; }
+}
 
 /* solved dialog ------------------------------------------------------------------- */
 dialog {
@@ -163,6 +189,14 @@ dialog button.primary { background: var(--ink); color: var(--ivory); }
   <div class="status">
     <div class="clock" id="clock" aria-label="Time">0:00</div>
     <div class="puzzle-id" id="puzzle-id"></div>
+    <div class="install" id="install" hidden>
+      <button type="button" class="get" id="install-btn" hidden>Install app</button>
+      <p class="ios-hint" id="ios-hint" hidden>
+        <span>To play offline from your home screen, tap Share, then Add to Home Screen.</span>
+        <button type="button" id="ios-hint-close" aria-label="Hide this tip">×</button>
+      </p>
+      <p class="offline-note" id="offline-note" hidden>Saved on this device, so it plays without a connection.</p>
+    </div>
   </div>
 
   <main class="play">
@@ -779,10 +813,46 @@ window.addEventListener("hashchange", () => {
   $("mode-note").textContent = mode.kind === "local"
     ? "Puzzles are generated on your computer by the Dojuboga engine."
     : "";
+  if (mode.kind === "static") setupOffline();
   const h = fromHash();
   const level = h ? h[0] : (LEVELS.includes(store.get("level", "")) ? store.get("level", "") : "medium");
   if (h && h[1] != null) await load(level, h[1]); else { S.level = level; newPuzzle(); }
 })();
+
+// ---------------------------------------------------------------------------
+// installable app and offline play (static sites only)
+// ---------------------------------------------------------------------------
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  installPrompt = e;
+  if (!standalone()) { $("install").hidden = false; $("install-btn").hidden = false; }
+});
+window.addEventListener("appinstalled", () => { installPrompt = null; $("install-btn").hidden = true; });
+$("install-btn").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  try { await installPrompt.userChoice; } catch (e) { /* dismissed */ }
+  installPrompt = null; $("install-btn").hidden = true;
+});
+$("ios-hint-close").addEventListener("click", () => { $("ios-hint").hidden = true; store.set("iosHintHidden", true); });
+
+async function setupOffline() {
+  if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
+  try {
+    await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+  } catch (e) { return; }                                // e.g. a sandboxed preview: stay a plain page
+  $("install").hidden = false;
+  $("offline-note").hidden = false;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios && !standalone() && !store.get("iosHintHidden", false)) $("ios-hint").hidden = false;
+  if (standalone() && navigator.storage && navigator.storage.persist) {
+    try { await navigator.storage.persist(); } catch (e) { /* not granted */ }
+  }
+}
 
 // for tests and the curious
 window.dojuboga = {state: S, mode, act, hold, rotate, hint, reveal, clearBoard, load};
