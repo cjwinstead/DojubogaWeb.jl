@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dojuboga</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 46'%3E%3Crect x='1' y='1' width='90' height='44' rx='9' fill='%231D2127'/%3E%3Ccircle cx='23' cy='23' r='6' fill='%23F3EEDF'/%3E%3Ccircle cx='60' cy='13' r='6' fill='%23F3EEDF'/%3E%3Ccircle cx='78' cy='33' r='6' fill='%23F3EEDF'/%3E%3C/svg%3E">
+<meta name="description" content="Place every domino so each coloured region's rule holds. Every puzzle has exactly one solution.">
+<style>
+:root {
+  --paper: #E6EAF0;
+  --paper-deep: #D5DBE4;
+  --ink: #1D2127;
+  --ink-soft: #4E5866;
+  --ivory: #F3EEDF;
+  --blank: #F7F9FB;
+  --ok: #2F8A5B;
+  --bad: #C23A44;
+  --focus: #2A62D9;
+  --font: "Futura", "Futura PT", "Avenir Next", "Avenir", "Century Gothic", "URW Gothic", "URW Gothic L", "Gill Sans", "Trebuchet MS", sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); color: var(--ink); font-family: var(--font); }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* header ------------------------------------------------------------------ */
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px;
+  padding: 22px clamp(16px, 4vw, 48px) 10px;
+}
+.wordmark {
+  margin: 0; font-size: clamp(30px, 4.2vw, 42px); font-weight: 800; letter-spacing: -0.02em;
+  line-height: 1; display: flex; align-items: center; gap: 12px;
+}
+.wordmark svg { width: 46px; height: 23px; flex: none; }
+.levels { display: flex; gap: 2px; padding: 3px; background: var(--paper-deep); border-radius: 999px; }
+.levels button {
+  border: 0; background: transparent; padding: 7px 15px; border-radius: 999px; cursor: pointer;
+  font-size: 15px; color: var(--ink-soft);
+}
+.levels button[aria-pressed="true"] { background: var(--ink); color: var(--ivory); }
+.levels button:not([aria-pressed="true"]):hover { color: var(--ink); }
+.new {
+  margin-left: auto; border: 2px solid var(--ink); background: var(--ink); color: var(--ivory);
+  padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 15px; font-weight: 600;
+}
+.new:hover { background: #343b45; border-color: #343b45; }
+
+/* layout -------------------------------------------------------------------- */
+.layout {
+  flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 0 40px;
+  grid-template-areas: "play status" "play side";
+  grid-template-rows: auto 1fr;
+  padding: 8px clamp(16px, 4vw, 48px) 24px; align-items: start;
+}
+.play { grid-area: play; min-width: 0; }
+.status { grid-area: status; }
+.side { grid-area: side; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "play" "side"; gap: 0; }
+  .status { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .status .clock { font-size: 28px; }
+  .status .puzzle-id { margin: 0; }
+  .side { margin-top: 30px; }
+}
+
+/* board --------------------------------------------------------------------- */
+.board-wrap { display: flex; }
+#board {
+  display: block; width: 100%; max-width: min(640px, 100%); height: auto; max-height: 64vh;
+  touch-action: none; user-select: none; -webkit-user-select: none; border-radius: 6px;
+}
+#board:focus { outline: none; }
+#board:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.loading { color: var(--ink-soft); font-size: 17px; padding: 48px 0; }
+
+/* hand + tray -------------------------------------------------------------------- */
+.hand-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 18px 0 10px; }
+.hand { display: flex; align-items: center; gap: 12px; min-height: 64px; }
+.hand-label { font-size: 15px; color: var(--ink-soft); }
+#hand-tile { width: 64px; height: 64px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.actions button {
+  border: 2px solid var(--ink); background: transparent; padding: 7px 14px; border-radius: 999px;
+  cursor: pointer; font-size: 15px;
+}
+.actions button:hover:not(:disabled) { background: var(--ink); color: var(--ivory); }
+.actions button:disabled { opacity: 0.35; cursor: default; }
+#tray {
+  display: flex; flex-wrap: wrap; gap: 10px; padding: 14px; background: var(--paper-deep);
+  border-radius: 10px; touch-action: none;
+}
+.tile {
+  border: 0; padding: 0; background: none; cursor: grab; border-radius: 9px; line-height: 0;
+  transition: transform 120ms ease;
+}
+.tile svg { width: 76px; height: 38px; display: block; }
+.tile:hover:not(.used) { transform: translateY(-2px); }
+.tile.held { transform: translateY(-4px); box-shadow: 0 0 0 3px var(--paper-deep), 0 0 0 6px var(--focus); }
+.tile.used { cursor: default; }
+.tile.used svg .face { fill: transparent; stroke: #A9B3C1; stroke-dasharray: 5 4; stroke-width: 2; }
+.tile.used svg .pip, .tile.used svg .div, .tile.used svg .num { display: none; }
+.message { min-height: 24px; margin: 12px 0 0; font-size: 16px; color: var(--ink-soft); }
+.message.alert { color: var(--bad); }
+
+/* sidebar ---------------------------------------------------------------------- */
+.side, .status { font-size: 15px; line-height: 1.55; color: var(--ink-soft); }
+.clock { font-size: 40px; font-weight: 700; color: var(--ink); line-height: 1; font-variant-numeric: tabular-nums; }
+.puzzle-id { margin: 6px 0 22px; }
+.side h2 { font-size: 17px; margin: 0 0 6px; color: var(--ink); }
+.side ul { padding-left: 18px; margin: 6px 0 14px; }
+.side li { margin: 3px 0; }
+.side kbd {
+  font-family: inherit; font-size: 13px; padding: 1px 6px; border-radius: 4px; background: var(--paper-deep);
+  color: var(--ink);
+}
+.rule-chip {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; transform: rotate(45deg);
+  background: var(--ink); border-radius: 4px; vertical-align: middle; margin: 0 4px 0 2px;
+}
+.rule-chip span { transform: rotate(-45deg); color: var(--ivory); font-size: 12px; font-weight: 700; }
+footer { padding: 18px clamp(16px, 4vw, 48px) 26px; font-size: 13px; color: var(--ink-soft); }
+
+/* solved dialog ------------------------------------------------------------------- */
+dialog {
+  border: 0; border-radius: 14px; padding: 28px 30px 24px; background: var(--ivory); color: var(--ink);
+  max-width: 340px; box-shadow: 0 24px 60px rgba(29, 33, 39, 0.35);
+}
+dialog::backdrop { background: rgba(29, 33, 39, 0.35); }
+dialog h2 { margin: 0 0 4px; font-size: 30px; }
+dialog p { margin: 0 0 20px; color: var(--ink-soft); font-size: 16px; }
+dialog .row { display: flex; gap: 10px; justify-content: flex-end; }
+dialog button { border: 2px solid var(--ink); border-radius: 999px; padding: 8px 16px; cursor: pointer; background: transparent; font-size: 15px; }
+dialog button.primary { background: var(--ink); color: var(--ivory); }
+
+/* the one orchestrated moment: pips light up in a ripple when solved */
+@keyframes pipglow { 0% { fill: var(--ivory); } 40% { fill: #FFD75E; } 100% { fill: var(--ivory); } }
+.solved-anim .pip { animation: pipglow 700ms ease both; animation-delay: calc(var(--d) * 1ms); }
+@media (prefers-reduced-motion: reduce) {
+  .solved-anim .pip { animation: none; }
+  .tile { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 class="wordmark">
+    <svg viewBox="0 0 92 46" aria-hidden="true"><rect x="1" y="1" width="90" height="44" rx="9" fill="#1D2127"/><line x1="46" y1="9" x2="46" y2="37" stroke="#F3EEDF" stroke-opacity=".45" stroke-width="2"/><circle cx="23" cy="23" r="5" fill="#F3EEDF"/><circle cx="60" cy="13" r="5" fill="#F3EEDF"/><circle cx="78" cy="33" r="5" fill="#F3EEDF"/></svg>
+    Dojuboga
+  </h1>
+  <div class="levels" role="group" aria-label="Difficulty">
+    <button type="button" data-level="easy">Easy</button>
+    <button type="button" data-level="medium">Medium</button>
+    <button type="button" data-level="hard">Hard</button>
+    <button type="button" data-level="expert">Expert</button>
+  </div>
+  <button type="button" class="new" id="new">New puzzle</button>
+</header>
+
+<div class="layout">
+  <div class="status">
+    <div class="clock" id="clock" aria-label="Time">0:00</div>
+    <div class="puzzle-id" id="puzzle-id"></div>
+  </div>
+
+  <main class="play">
+    <div class="board-wrap">
+      <svg id="board" tabindex="0" role="application" aria-label="Puzzle board. Use arrow keys to move, Enter to place or pick up, R to rotate."></svg>
+    </div>
+    <div class="hand-row">
+      <div class="hand" aria-live="polite">
+        <svg id="hand-tile" viewBox="0 0 128 128" aria-hidden="true"></svg>
+        <span class="hand-label" id="hand-label">Pick a domino</span>
+      </div>
+      <div class="actions">
+        <button type="button" id="rotate" title="Rotate (R)">Rotate</button>
+        <button type="button" id="hint" title="Hint (H)">Hint</button>
+        <button type="button" id="clear">Clear board</button>
+        <button type="button" id="reveal">Show solution</button>
+      </div>
+    </div>
+    <div id="tray" role="group" aria-label="Dominoes"></div>
+    <p class="message" id="message" role="status"></p>
+  </main>
+
+  <aside class="side">
+    <h2>How to play</h2>
+    <p>Place every domino on the board so that each coloured region keeps its rule:</p>
+    <ul>
+      <li><span class="rule-chip"><span>7</span></span> its pips add up to 7</li>
+      <li><span class="rule-chip"><span>&lt;4</span></span> <span class="rule-chip"><span>&gt;9</span></span> they add up to less or more</li>
+      <li><span class="rule-chip"><span>=</span></span> they are all the same</li>
+      <li><span class="rule-chip"><span>≠</span></span> they are all different</li>
+    </ul>
+    <p>Blank squares have no rule. Every puzzle has exactly one solution.</p>
+    <p>Drag a domino onto the board, or tap it and then tap a square: the ringed half lands there.
+       Rotate with <kbd>R</kbd>, right-click, or by tapping the held domino again.
+       Pick a placed domino up by tapping it.</p>
+  </aside>
+</div>
+
+<footer>
+  <span id="mode-note"></span>
+  Inspired by Pips from The New York Times Games; Dojuboga is an independent project.
+</footer>
+
+<dialog id="solved" aria-labelledby="solved-title">
+  <h2 id="solved-title">Solved</h2>
+  <p id="solved-text"></p>
+  <div class="row">
+    <button type="button" id="solved-close">Look again</button>
+    <button type="button" class="primary" id="solved-next">Next puzzle</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// constants
+// ---------------------------------------------------------------------------
+const PALETTE = [null, "#F6C453", "#8FB8F0", "#F29CB6", "#8ED1A5", "#C3A6EC",
+                 "#F7A97B", "#7FD3D6", "#D9E07A", "#B5C7A1", "#F0B8E0"];
+const INK = "#1D2127", IVORY = "#F3EEDF", BLANK = "#F7F9FB", OK = "#2F8A5B", BAD = "#C23A44";
+const CELL = 64, PAD = 16;
+const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];          // .b half: right, below, left, above
+const PIPS = {0: [], 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]],
+              4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+              6: [[-1, -1], [-1, 0], [-1, 1], [1, -1], [1, 0], [1, 1]]};
+const LEVELS = ["easy", "medium", "hard", "expert"];
+const NAMES = {easy: "Easy", medium: "Medium", hard: "Hard", expert: "Expert"};
+
+// ---------------------------------------------------------------------------
+// state
+// ---------------------------------------------------------------------------
+const S = {
+  p: null, index: new Map(), level: "medium", ref: null,
+  loc: [], occ: [], held: -1, orient: 0,
+  hover: -1, floating: null, cursor: null, keyboard: false,
+  started: 0, finished: 0, revealed: false,
+};
+const mode = {kind: null, packs: {}};
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("dojuboga." + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("dojuboga." + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+};
+
+// ---------------------------------------------------------------------------
+// game rules (mirror Dojuboga's front-end API)
+// ---------------------------------------------------------------------------
+const cellAt = (r, c) => S.index.has(r + "," + c) ? S.index.get(r + "," + c) : -1;
+function target(cell, o) { const [r, c] = S.p.cells[cell], [dr, dc] = DIRS[o]; return cellAt(r + dr, c + dc); }
+function canPlace(cell) {
+  if (S.held < 0 || cell < 0) return false;
+  const t = target(cell, S.orient);
+  return t >= 0 && S.occ[cell] < 0 && S.occ[t] < 0;
+}
+function pipAt(i) {
+  const d = S.occ[i];
+  if (d < 0) return null;
+  const [a, b] = S.p.dominoes[d];
+  return S.loc[d][0] === i ? a : b;
+}
+function satisfies(rule, v) {
+  const s = v.reduce((x, y) => x + y, 0);
+  switch (rule.kind) {
+    case "sum": return s === rule.k;
+    case "less": return s < rule.k;
+    case "greater": return s > rule.k;
+    case "equal": return v.every(x => x === v[0]);
+    case "notequal": return new Set(v).size === v.length;
+    default: return true;
+  }
+}
+function regionState(r) {
+  const v = S.p.regions[r].cells.map(pipAt);
+  if (v.some(x => x === null)) return "open";
+  return satisfies(S.p.regions[r].rule, v) ? "ok" : "bad";
+}
+const inTray = d => S.loc[d] === null;
+const domName = d => S.p.dominoes[d].join("–");
+
+function put(d, a, b) { S.loc[d] = [a, b]; S.occ[a] = d; S.occ[b] = d; }
+function lift(d) { const l = S.loc[d]; if (!l) return; S.occ[l[0]] = -1; S.occ[l[1]] = -1; S.loc[d] = null; }
+function orientationOf(d) {
+  const [a, b] = S.loc[d], [r1, c1] = S.p.cells[a], [r2, c2] = S.p.cells[b];
+  return DIRS.findIndex(([dr, dc]) => dr === r2 - r1 && dc === c2 - c1);
+}
+function hold(d) {
+  if (S.finished) return;
+  if (!inTray(d)) { S.orient = orientationOf(d); lift(d); }
+  S.held = d;
+  say("");
+  update();
+}
+function release() { if (S.held < 0) return; S.held = -1; say(""); update(); }
+function rotate(step) {
+  if (S.held < 0 || S.finished) return;
+  S.orient = (S.orient + step + 4) % 4;
+  update();
+}
+function placeAt(cell) {
+  const d = S.held;
+  put(d, cell, target(cell, S.orient));
+  S.held = -1;
+  say("");
+  checkSolved();
+  update();
+}
+// The "click" on a square: place, swap, or pick up.
+function act(cell) {
+  if (S.finished || cell < 0) return;
+  if (S.held >= 0) {
+    if (canPlace(cell)) return placeAt(cell);
+    if (S.occ[cell] >= 0) return hold(S.occ[cell]);
+    say("The " + domName(S.held) + " doesn't fit there. Try rotating it.", true);
+    return update();
+  }
+  if (S.occ[cell] >= 0) hold(S.occ[cell]);
+}
+function removeAt(cell) {
+  if (S.finished || cell < 0 || S.occ[cell] < 0) return;
+  const d = S.occ[cell]; lift(d);
+  say("The " + domName(d) + " is back in the tray.");
+  update();
+}
+function hint() {
+  if (S.finished || !S.p) return;
+  const todo = S.p.solution.filter(s => {
+    const l = S.loc[s.domino];
+    return !(l && ((l[0] === s.a && l[1] === s.b) ||
+                   (l[0] === s.b && l[1] === s.a && S.p.dominoes[s.domino][0] === S.p.dominoes[s.domino][1])));
+  });
+  if (!todo.length) return;
+  const s = todo[Math.floor(Math.random() * todo.length)];
+  if (S.held === s.domino) S.held = -1;
+  for (const c of [s.a, s.b]) if (S.occ[c] >= 0) lift(S.occ[c]);
+  lift(s.domino); put(s.domino, s.a, s.b);
+  say("Hint: the " + domName(s.domino) + " goes here.");
+  checkSolved();
+  update();
+}
+function clearBoard() {
+  if (!S.p) return;
+  S.loc = S.loc.map(() => null); S.occ = S.occ.map(() => -1);
+  S.held = -1; S.finished = 0; S.revealed = false; S.started = Date.now();
+  say("Board cleared.");
+  update();
+}
+function reveal() {
+  if (S.finished || !S.p) return;
+  S.loc = S.loc.map(() => null); S.occ = S.occ.map(() => -1); S.held = -1;
+  for (const s of S.p.solution) put(s.domino, s.a, s.b);
+  S.revealed = true;
+  checkSolved();
+  update();
+}
+function checkSolved() {
+  if (S.loc.some(l => l === null)) return;
+  if (S.p.regions.every((_, r) => regionState(r) === "ok")) {
+    S.finished = Date.now();
+    if (S.revealed) { say("This is the solution."); return; }
+    markSolved();
+    const secs = Math.round((S.finished - S.started) / 1000);
+    $("solved-text").textContent = "You placed all " + S.p.dominoes.length + " dominoes in " + fmt(secs) + ".";
+    setTimeout(() => { try { $("solved").showModal(); } catch (e) { $("solved").setAttribute("open", ""); } }, 900);
+    say("Solved in " + fmt(secs) + ".");
+  } else {
+    say("Every domino is placed, but some rules are broken. Look for the red badges.", true);
+  }
+}
+function markSolved() {
+  if (mode.kind !== "static") return;
+  const solved = new Set(store.get("solved." + S.level, []));
+  solved.add(S.ref); store.set("solved." + S.level, [...solved]);
+}
+
+// ---------------------------------------------------------------------------
+// drawing
+// ---------------------------------------------------------------------------
+const cx = i => PAD + S.p.cells[i][1] * CELL + CELL / 2;
+const cy = i => PAD + S.p.cells[i][0] * CELL + CELL / 2;
+function pipsSVG(x, y, v, color, cls, k0) {
+  if (!(v in PIPS)) return `<text class="num" x="${x}" y="${y + 7}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}">${v}</text>`;
+  return PIPS[v].map(([dx, dy], k) =>
+    `<circle class="${cls}" style="--d:${k0 + k * 40}" cx="${x + dx * 15}" cy="${y + dy * 15}" r="5.4" fill="${color}"/>`).join("");
+}
+// A domino whose halves are centred at (x1,y1) and (x2,y2).
+function dominoSVG(x1, y1, x2, y2, a, b, opts = {}) {
+  const inset = opts.inset ?? 6, half = CELL / 2 - inset;
+  const x = Math.min(x1, x2) - half, y = Math.min(y1, y2) - half;
+  const w = Math.abs(x1 - x2) + 2 * half, h = Math.abs(y1 - y2) + 2 * half;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, vertical = x1 === x2;
+  const fill = opts.fill ?? INK, pip = opts.pip ?? IVORY;
+  const div = vertical ? `x1="${mx - 18}" y1="${my}" x2="${mx + 18}" y2="${my}"` : `x1="${mx}" y1="${my - 18}" x2="${mx}" y2="${my + 18}"`;
+  const k0 = opts.delay ?? 0;
+  return `<g opacity="${opts.opacity ?? 1}">` +
+    `<rect class="face" x="${x}" y="${y}" width="${w}" height="${h}" rx="11" fill="${fill}"` +
+    (opts.stroke ? ` stroke="${opts.stroke}" stroke-width="3"` : "") + `/>` +
+    `<line class="div" ${div} stroke="${pip}" stroke-opacity=".4" stroke-width="2"/>` +
+    pipsSVG(x1, y1, a, pip, "pip", k0) + pipsSVG(x2, y2, b, pip, "pip", k0 + 20) +
+    (opts.ring ? `<circle cx="${x1}" cy="${y1}" r="${half - 3}" fill="none" stroke="${opts.ring}" stroke-width="3"/>` : "") +
+    `</g>`;
+}
+// Where to draw each region's rule badge: on a corner of one of its squares,
+// chosen so the badge reads as belonging to that region (interior corners and
+// corners against the board's edge first, then corners touching the fewest
+// other ruled regions), preferring bottom-right and keeping badges apart.
+function badgeSpots() {
+  const p = S.p, regionOf = new Array(p.cells.length), spots = [];
+  p.regions.forEach((reg, r) => reg.cells.forEach(i => regionOf[i] = r));
+  p.regions.forEach((reg, r) => {
+    if (!reg.label) { spots.push(null); return; }
+    let best = null, bestScore = Infinity;
+    for (const i of reg.cells) {
+      const [row, col] = p.cells[i];
+      for (const [dy, dx] of [[1, 1], [1, 0], [0, 1], [0, 0]]) {
+        const sy = dy ? 1 : -1, sx = dx ? 1 : -1;
+        let score = 0;
+        for (const [nr, nc] of [[row + sy, col], [row, col + sx], [row + sy, col + sx]]) {
+          const j = cellAt(nr, nc);
+          if (j >= 0 && regionOf[j] !== r) score += p.regions[regionOf[j]].label ? 3 : 1;
+        }
+        const x = PAD + (col + dx) * CELL, y = PAD + (row + dy) * CELL;
+        if (spots.some(q => q && Math.hypot(q[0] - x, q[1] - y) < 30)) score += 20;
+        score += (1 - dy) * 0.2 + (1 - dx) * 0.1 - (row + col) * 0.001;
+        if (score < bestScore) { bestScore = score; best = [x, y]; }
+      }
+    }
+    spots.push(best);
+  });
+  return spots;
+}
+function badgeSVG(r, spot) {
+  const reg = S.p.regions[r];
+  if (!reg.label || !spot) return "";
+  const [x, y] = spot;
+  const st = regionState(r), fill = st === "ok" ? OK : st === "bad" ? BAD : INK;
+  const fs = reg.label.length >= 3 ? 12 : 14;
+  return `<g><rect x="${x - 13}" y="${y - 13}" width="26" height="26" rx="4" transform="rotate(45 ${x} ${y})" fill="${fill}" stroke="${BLANK}" stroke-width="2"/>` +
+         `<text x="${x}" y="${y + fs * 0.36}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${IVORY}">${esc(reg.label)}</text></g>`;
+}
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function drawBoard() {
+  const p = S.p, W = p.cols * CELL + 2 * PAD, H = p.rows * CELL + 2 * PAD;
+  const svg = $("board");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const regionOf = new Array(p.cells.length);
+  p.regions.forEach((reg, r) => reg.cells.forEach(i => regionOf[i] = r));
+  let out = "";
+  // squares, coloured by region
+  p.cells.forEach(([row, col], i) => {
+    const reg = p.regions[regionOf[i]];
+    out += `<rect x="${PAD + col * CELL}" y="${PAD + row * CELL}" width="${CELL}" height="${CELL}" fill="${reg.color ? PALETTE[reg.color] : BLANK}"/>`;
+  });
+  // seams inside regions (light) and region outlines (ink)
+  let seams = "", edges = "";
+  p.cells.forEach(([row, col], i) => {
+    const x = PAD + col * CELL, y = PAD + row * CELL;
+    for (const [dr, dc, x1, y1, x2, y2] of [[-1, 0, 0, 0, 1, 0], [1, 0, 0, 1, 1, 1], [0, -1, 0, 0, 0, 1], [0, 1, 1, 0, 1, 1]]) {
+      const j = cellAt(row + dr, col + dc);
+      const seg = `M${x + x1 * CELL} ${y + y1 * CELL}L${x + x2 * CELL} ${y + y2 * CELL}`;
+      if (j >= 0 && regionOf[j] === regionOf[i]) { if (dr > 0 || dc > 0) seams += seg; }
+      else edges += seg;
+    }
+  });
+  out += `<path d="${seams}" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="1.5"/>`;
+  out += `<path d="${edges}" stroke="${INK}" stroke-width="2.5" stroke-linecap="square" fill="none"/>`;
+  // placed dominoes
+  let k = 0;
+  S.loc.forEach((l, d) => {
+    if (!l) return;
+    const [a, b] = p.dominoes[d];
+    out += dominoSVG(cx(l[0]), cy(l[0]), cx(l[1]), cy(l[1]), a, b, {delay: (k++) * 70});
+  });
+  // rule badges on top
+  if (!S.spots) S.spots = badgeSpots();
+  p.regions.forEach((_, r) => out += badgeSVG(r, S.spots[r]));
+  out += `<g id="ghost"></g>`;
+  // keyboard cursor
+  if (S.keyboard && S.cursor) {
+    const [row, col] = S.cursor;
+    out += `<rect x="${PAD + col * CELL + 3}" y="${PAD + row * CELL + 3}" width="${CELL - 6}" height="${CELL - 6}" rx="8" fill="none" stroke="var(--focus)" stroke-width="3.5"/>`;
+  }
+  svg.innerHTML = out;
+  svg.classList.toggle("solved-anim", !!S.finished && !S.revealed);
+  drawGhost();
+}
+
+function drawGhost() {
+  const g = document.getElementById("ghost");
+  if (!g) return;
+  if (S.held < 0 || S.finished) { g.innerHTML = ""; return; }
+  const [a, b] = S.p.dominoes[S.held], [dr, dc] = DIRS[S.orient];
+  let x1, y1, ring, opacity = 0.85, stroke;
+  const anchor = S.hover >= 0 ? S.hover : (S.keyboard && S.cursor ? cellAt(S.cursor[0], S.cursor[1]) : -1);
+  if (anchor >= 0) {
+    x1 = cx(anchor); y1 = cy(anchor);
+    const fits = canPlace(anchor);
+    stroke = fits ? OK : BAD; ring = fits ? "#7CE0A6" : "#FF9AA2"; opacity = fits ? 0.82 : 0.6;
+  } else if (S.floating) {
+    [x1, y1] = S.floating; ring = "#FFD75E"; opacity = 0.75;
+  } else { g.innerHTML = ""; return; }
+  g.innerHTML = dominoSVG(x1, y1, x1 + dc * CELL, y1 + dr * CELL, a, b, {opacity, stroke, ring});
+}
+
+function tileSVG(a, b, w, h, vertical) {
+  const tw = vertical ? 64 : 128, th = vertical ? 128 : 64;
+  return `<svg viewBox="0 0 ${tw} ${th}" width="${w}" height="${h}" aria-hidden="true">` +
+         dominoSVG(32, 32, vertical ? 32 : 96, vertical ? 96 : 32, a, b, {inset: 3}) + `</svg>`;
+}
+function drawTray() {
+  const tray = $("tray");
+  tray.innerHTML = "";
+  S.p.dominoes.forEach(([a, b], d) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tile" + (inTray(d) ? "" : " used") + (S.held === d ? " held" : "");
+    btn.dataset.d = d;
+    btn.setAttribute("aria-label", inTray(d) ? `Domino ${a} and ${b}` + (S.held === d ? ", in hand" : "") : `Domino ${a} and ${b}, on the board`);
+    if (!inTray(d)) btn.tabIndex = -1;
+    btn.innerHTML = tileSVG(a, b, 76, 38, false);
+    tray.appendChild(btn);
+  });
+}
+function drawHand() {
+  const svg = $("hand-tile");
+  if (S.held < 0) {
+    svg.innerHTML = `<rect x="4" y="4" width="120" height="120" rx="14" fill="none" stroke="#A9B3C1" stroke-width="2" stroke-dasharray="6 5"/>`;
+    $("hand-label").textContent = S.finished ? "" : "Pick a domino";
+  } else {
+    const [a, b] = S.p.dominoes[S.held], [dr, dc] = DIRS[S.orient];
+    const x1 = 64 - dc * 32, y1 = 64 - dr * 32;
+    svg.innerHTML = dominoSVG(x1, y1, x1 + dc * 64, y1 + dr * 64, a, b, {ring: "#FFD75E"});
+    $("hand-label").textContent = "In hand: the ringed half goes on the square you pick";
+  }
+  $("rotate").disabled = S.held < 0 || !!S.finished;
+  $("hint").disabled = !!S.finished;
+  $("reveal").disabled = !!S.finished;
+}
+function update() {
+  if (!S.p) return;
+  drawBoard(); drawTray(); drawHand();
+}
+function say(text, alert = false) {
+  const m = $("message");
+  m.textContent = text;
+  m.classList.toggle("alert", alert);
+}
+const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+setInterval(() => {
+  if (!S.p) return;
+  const end = S.finished || Date.now();
+  $("clock").textContent = fmt(Math.floor((end - S.started) / 1000));
+}, 500);
+
+// ---------------------------------------------------------------------------
+// input: pointer (mouse, touch, pen), keyboard
+// ---------------------------------------------------------------------------
+function svgPoint(clientX, clientY) {
+  const svg = $("board"), pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const q = pt.matrixTransform(m.inverse());
+  return [q.x, q.y];
+}
+function cellFromClient(clientX, clientY) {
+  const q = svgPoint(clientX, clientY);
+  if (!q || !S.p) return -1;
+  const col = Math.floor((q[0] - PAD) / CELL), row = Math.floor((q[1] - PAD) / CELL);
+  return cellAt(row, col);
+}
+function insideBoard(clientX, clientY) {
+  const r = $("board").getBoundingClientRect();
+  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+}
+
+let drag = null;   // {src: "tray" | "board", d, x, y, moved, wasHeld, cell}
+function trackDrag(e) {
+  if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) drag.moved = true;
+  if (!drag.moved || S.held < 0) return;
+  S.keyboard = false;
+  if (insideBoard(e.clientX, e.clientY)) {
+    S.hover = cellFromClient(e.clientX, e.clientY);
+    S.floating = S.hover < 0 ? svgPoint(e.clientX, e.clientY) : null;
+  } else { S.hover = -1; S.floating = null; }
+  drawGhost();
+}
+function endDrag(e) {
+  if (!drag) return;
+  const dg = drag; drag = null;
+  if (dg.moved) {
+    const cell = insideBoard(e.clientX, e.clientY) ? cellFromClient(e.clientX, e.clientY) : -1;
+    S.floating = null;
+    if (cell >= 0) {
+      if (S.held >= 0 && canPlace(cell)) placeAt(cell);
+      else if (S.held >= 0) { say("The " + domName(S.held) + " doesn't fit there. Try rotating it.", true); update(); }
+    } else update();
+  } else if (dg.src === "tray") {
+    if (dg.wasHeld) rotate(1);
+  } else if (dg.src === "board") {
+    act(dg.cell);
+  }
+  if (e.pointerType !== "mouse") { S.hover = -1; drawGhost(); }
+}
+
+$("tray").addEventListener("pointerdown", e => {
+  const btn = e.target.closest(".tile");
+  if (!btn || btn.classList.contains("used") || e.button > 0 || S.finished) return;
+  e.preventDefault();
+  btn.focus({preventScroll: true});
+  const d = +btn.dataset.d, wasHeld = S.held === d;
+  if (!wasHeld) hold(d);
+  drag = {src: "tray", d, x: e.clientX, y: e.clientY, moved: false, wasHeld};
+});
+$("tray").addEventListener("keydown", e => {
+  const btn = e.target.closest(".tile");
+  if (!btn || (e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault();
+  const d = +btn.dataset.d;
+  if (btn.classList.contains("used")) return;
+  if (S.held === d) rotate(1); else hold(d);
+  $("tray").querySelector(`[data-d="${d}"]`)?.focus();
+});
+const board = $("board");
+board.addEventListener("pointerdown", e => {
+  if (e.button > 0 || !S.p) return;
+  e.preventDefault();
+  board.focus({preventScroll: true});
+  S.keyboard = false;
+  const cell = cellFromClient(e.clientX, e.clientY);
+  if (cell < 0) return;
+  if (S.held < 0 && S.occ[cell] >= 0 && !S.finished) {
+    hold(S.occ[cell]);                                     // picked up; a drag can move it
+    drag = {src: "lifted", d: S.held, x: e.clientX, y: e.clientY, moved: false, cell};
+  } else {
+    drag = {src: "board", x: e.clientX, y: e.clientY, moved: false, cell};
+  }
+});
+board.addEventListener("pointermove", e => {
+  if (drag || e.pointerType !== "mouse" || !S.p) return;
+  const c = cellFromClient(e.clientX, e.clientY);
+  if (c !== S.hover) { S.hover = c; drawGhost(); }
+});
+board.addEventListener("pointerleave", () => { if (!drag) { S.hover = -1; drawGhost(); } });
+board.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (S.held >= 0) rotate(1);
+  else removeAt(cellFromClient(e.clientX, e.clientY));
+});
+window.addEventListener("pointermove", trackDrag);
+window.addEventListener("pointerup", endDrag);
+window.addEventListener("pointercancel", () => { drag = null; S.floating = null; drawGhost(); });
+
+board.addEventListener("focus", () => {
+  if (!S.p) return;
+  if (!S.cursor) S.cursor = [...S.p.cells[0]];
+});
+board.addEventListener("blur", () => { if (S.keyboard) { S.keyboard = false; if (S.p) drawBoard(); } });
+board.addEventListener("keydown", e => {
+  if (!S.p) return;
+  const moves = {ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1]};
+  if (e.key in moves) {
+    e.preventDefault();
+    if (!S.cursor) S.cursor = [...S.p.cells[0]];
+    const [dr, dc] = moves[e.key];
+    S.cursor = [Math.min(S.p.rows - 1, Math.max(0, S.cursor[0] + dr)), Math.min(S.p.cols - 1, Math.max(0, S.cursor[1] + dc))];
+    S.keyboard = true; S.hover = -1;
+    drawBoard();
+  } else if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    if (!S.cursor) return;
+    S.keyboard = true;
+    act(cellAt(S.cursor[0], S.cursor[1]));
+  } else if (e.key === "x" || e.key === "Delete" || e.key === "Backspace") {
+    if (S.cursor) removeAt(cellAt(S.cursor[0], S.cursor[1]));
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || $("solved").open) return;
+  if (e.key === "r") rotate(1);
+  else if (e.key === "R") rotate(-1);
+  else if (e.key === "Escape") release();
+  else if (e.key === "h" || e.key === "?") hint();
+  else if (e.key === "n") newPuzzle();
+});
+
+$("rotate").addEventListener("click", () => rotate(1));
+$("hint").addEventListener("click", hint);
+$("clear").addEventListener("click", clearBoard);
+$("reveal").addEventListener("click", reveal);
+$("new").addEventListener("click", () => newPuzzle());
+document.querySelectorAll(".levels button").forEach(b =>
+  b.addEventListener("click", () => { S.level = b.dataset.level; store.set("level", S.level); newPuzzle(); }));
+$("solved-close").addEventListener("click", () => $("solved").close());
+$("solved-next").addEventListener("click", () => { $("solved").close(); newPuzzle(); });
+
+// ---------------------------------------------------------------------------
+// puzzles: local engine or static packs
+// ---------------------------------------------------------------------------
+async function detectMode() {
+  try {
+    const r = await fetch("api/info.json", {cache: "no-store"});
+    if (r.ok) { const j = await r.json(); if (j.mode === "local") return "local"; }
+  } catch (e) { /* no engine: static site */ }
+  return "static";
+}
+async function getPack(level) {
+  if (!mode.packs[level]) {
+    const r = await fetch("puzzles/" + level + ".json");
+    if (!r.ok) throw new Error("pack " + level + ": HTTP " + r.status);
+    mode.packs[level] = await r.json();
+  }
+  return mode.packs[level];
+}
+function pickIndex(n) {
+  const solved = new Set(store.get("solved." + S.level, []));
+  const open = [];
+  for (let i = 0; i < n; i++) if (!solved.has(i)) open.push(i);
+  const pool = open.length ? open : [...Array(n).keys()];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+async function load(level, ref) {
+  S.level = level;
+  document.querySelectorAll(".levels button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.level === level)));
+  say("");
+  $("board").innerHTML = "";
+  $("puzzle-id").textContent = "Setting up a puzzle…";
+  let p, id;
+  try {
+    if (mode.kind === "local") {
+      const r = await fetch("api/new?level=" + level + (ref != null ? "&seed=" + encodeURIComponent(ref) : ""), {cache: "no-store"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      p = await r.json(); id = p.seed;
+      $("puzzle-id").textContent = NAMES[level] + " puzzle, seed " + p.seed;
+    } else {
+      const pack = await getPack(level), n = pack.puzzles.length;
+      let i = ref != null ? parseInt(ref, 10) : pickIndex(n);
+      if (!(i >= 0 && i < n)) i = pickIndex(n);
+      p = pack.puzzles[i]; id = String(i);
+      $("puzzle-id").textContent = NAMES[level] + " puzzle " + (i + 1) + " of " + n;
+    }
+  } catch (err) {
+    $("puzzle-id").textContent = "";
+    say(mode.kind === "local"
+      ? "The puzzle engine stopped responding. Restart it with DojubogaWeb.serve() and reload this page."
+      : "The puzzle packs couldn't be loaded. Open this page through a web server, for example GitHub Pages or DojubogaWeb.serve(site = \"…\").", true);
+    return;
+  }
+  S.p = p; S.ref = id; S.spots = null;
+  S.index = new Map(p.cells.map(([r, c], i) => [r + "," + c, i]));
+  S.loc = p.dominoes.map(() => null); S.occ = p.cells.map(() => -1);
+  S.held = -1; S.orient = 0; S.hover = -1; S.floating = null;
+  S.cursor = [...p.cells[0]]; S.keyboard = false;
+  S.started = Date.now(); S.finished = 0; S.revealed = false;
+  try { history.replaceState(null, "", "#" + level + "-" + id); } catch (e) { /* sandboxed frame */ }
+  update();
+}
+function newPuzzle() {
+  // local engine: pick a short seed so the puzzle number is easy to share
+  load(S.level, mode.kind === "local" ? String(1 + Math.floor(Math.random() * 999999)) : null);
+}
+function fromHash() {
+  const m = /^#(easy|medium|hard|expert)(?:-(\d+))?$/.exec(location.hash);
+  return m ? [m[1], m[2] ?? null] : null;
+}
+window.addEventListener("hashchange", () => {
+  const h = fromHash();
+  if (h && !(h[0] === S.level && h[1] === S.ref)) load(h[0], h[1]);
+});
+
+(async function start() {
+  mode.kind = await detectMode();
+  $("mode-note").textContent = mode.kind === "local"
+    ? "Puzzles are generated on your computer by the Dojuboga engine."
+    : "";
+  const h = fromHash();
+  const level = h ? h[0] : (LEVELS.includes(store.get("level", "")) ? store.get("level", "") : "medium");
+  if (h && h[1] != null) await load(level, h[1]); else { S.level = level; newPuzzle(); }
+})();
+
+// for tests and the curious
+window.dojuboga = {state: S, mode, act, hold, rotate, hint, reveal, clearBoard, load};
+</script>
+</body>
+</html>
